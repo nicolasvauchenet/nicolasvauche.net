@@ -1,0 +1,46 @@
+name: Deploy static site
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SCW_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SCW_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Ensure rsync is available
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
+
+      - name: Create remote app directory
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SCW_USER }}@${{ secrets.SCW_HOST }} \
+            "mkdir -p /srv/apps/nicolasvauche"
+
+      - name: Sync project files to server
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            -e "ssh -i ~/.ssh/id_ed25519" \
+            ./ ${{ secrets.SCW_USER }}@${{ secrets.SCW_HOST }}:/srv/apps/nicolasvauche/
+
+      - name: Deploy on Scaleway
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SCW_USER }}@${{ secrets.SCW_HOST }} '
+            cd /srv/apps/nicolasvauche &&
+            docker compose up -d --build
+          '
