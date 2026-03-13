@@ -16,31 +16,34 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SCW_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H ${{ secrets.SCW_HOST }} >> ~/.ssh/known_hosts
+          chmod 700 ~/.ssh
+          printf '%s' "${{ secrets.SCW_SSH_KEY }}" > ~/.ssh/scw_deploy
+          chmod 600 ~/.ssh/scw_deploy
+          ssh-keyscan -H "${{ secrets.SCW_HOST }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
-      - name: Ensure rsync is available
+      - name: Validate private key
         run: |
-          sudo apt-get update
-          sudo apt-get install -y rsync
+          ssh-keygen -y -f ~/.ssh/scw_deploy > /dev/null
 
       - name: Create remote app directory
         run: |
-          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SCW_USER }}@${{ secrets.SCW_HOST }} \
+          ssh -i ~/.ssh/scw_deploy ${{ secrets.SCW_USER }}@${{ secrets.SCW_HOST }} \
             "mkdir -p /srv/apps/nicolasvauche"
 
       - name: Sync project files to server
         run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
           rsync -az --delete \
             --exclude ".git" \
             --exclude ".github" \
-            -e "ssh -i ~/.ssh/id_ed25519" \
+            -e "ssh -i ~/.ssh/scw_deploy" \
             ./ ${{ secrets.SCW_USER }}@${{ secrets.SCW_HOST }}:/srv/apps/nicolasvauche/
 
       - name: Deploy on Scaleway
         run: |
-          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SCW_USER }}@${{ secrets.SCW_HOST }} '
+          ssh -i ~/.ssh/scw_deploy ${{ secrets.SCW_USER }}@${{ secrets.SCW_HOST }} '
             cd /srv/apps/nicolasvauche &&
             docker compose up -d --build
           '
